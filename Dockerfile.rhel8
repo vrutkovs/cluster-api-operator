@@ -1,0 +1,23 @@
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.18-openshift-4.12 AS builder
+WORKDIR /go/src/github.com/openshift/cluster-api-operator
+COPY . .
+
+RUN go build .
+
+# Build
+ARG package=.
+ARG ARCH
+ARG ldflags
+
+# Do not force rebuild of up-to-date packages (do not use -a) and use the compiler cache folder
+RUN go build -ldflags " -extldflags '-static'" -o manager .
+
+# Production image
+FROM registry.ci.openshift.org/ocp/4.12:base
+COPY --from=builder /go/src/github.com/openshift/cluster-api-operator/manager /usr/bin/manager
+# Use uid of nonroot user (65532) because kubernetes expects numeric user when applying pod security policies
+USER 65532
+ENTRYPOINT ["/usr/bin/manager"]
+LABEL io.k8s.display-name="OpenShift cluster-api-operator" \
+      io.k8s.description="This is a component of OpenShift and manages Cluster API actuators." \
+      io.openshift.release.operator=true
